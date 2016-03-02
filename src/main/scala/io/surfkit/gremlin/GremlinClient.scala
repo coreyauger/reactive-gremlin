@@ -12,7 +12,9 @@ import akka.stream.{IOResult, ActorMaterializer}
 import akka.stream.scaladsl._
 import akka.util.ByteString
 import play.api.libs.json.Json
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.FiniteDuration
 
 /**
   * Created by suroot on 23/02/16.
@@ -27,7 +29,18 @@ object GremlinClient {
 
   private var producerActor: Option[ActorRef] = None
 
-  var syncSet = scala.collection.mutable.Set.empty[UUID]
+  val limiter = system.actorOf(LimiterActor.props(250))
+
+  def limitGlobal[T](limiter: ActorRef, maxAllowedWait: FiniteDuration): Flow[T, T, akka.NotUsed] = {
+    import akka.pattern.ask
+    import akka.util.Timeout
+    Flow[T].mapAsync(4)((element: T) => {
+      //import system.dispatcher
+      implicit val triggerTimeout = Timeout(maxAllowedWait)
+      val limiterTriggerFuture = limiter ? LimiterActor.WantToPass
+      limiterTriggerFuture.map((_) => element)
+    })
+  }
 
   // Future[Done] is the materialized value of Sink.foreach,
   // emitted when the stream completes
@@ -54,7 +67,7 @@ object GremlinClient {
           val res = Json.parse(message.text).as[Gremlin.Response]
           //producerActor.map(_ ! res )
           //println(res)
-          syncSet -= res.requestId
+          limiter ! res
          // println(s"out ${res.requestId}")
           print("#")
       }
@@ -62,6 +75,7 @@ object GremlinClient {
     val (upgradeResponse, closed) =
       flow
       //.transform(() => new BufferN[TextMessage](syncSet, 1000))
+      .via(limitGlobal[TextMessage](limiter, 10 minutes) )
       .viaMat(webSocketFlow)(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
       .toMat(incoming)(Keep.both) // also keep the Future[Done]
       .run()
