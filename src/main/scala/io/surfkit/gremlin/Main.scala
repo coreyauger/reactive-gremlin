@@ -18,10 +18,10 @@ object Main extends App{
 
   override def main(args: Array[String]) {
 
-    val client = GremlinClient.connect()
+    /*val client = GremlinClient.connect()
 
     client ! GremlinClient.buildRequest("g.V(323600).both().valueMap()")
-    client ! GremlinClient.buildRequest("g.V(323600).valueMap()")
+    client ! GremlinClient.buildRequest("g.V(323600).valueMap()")*/
   }
 
 }

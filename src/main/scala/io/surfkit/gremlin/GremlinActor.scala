@@ -1,12 +1,14 @@
 package io.surfkit.gremlin
 
 import java.math.BigInteger
+import java.util.UUID
 
 import akka.actor.{Props, ActorLogging}
 import akka.http.scaladsl.model.ws.TextMessage
 import akka.stream.actor.ActorPublisherMessage.Request
 import akka.stream.actor.ActorSubscriberMessage.OnComplete
 import akka.stream.actor.{MaxInFlightRequestStrategy, ActorPublisher}
+import io.surfkit.gremlin.Gremlin.{Response, InFlight, GetInFlight}
 import play.api.libs.json.Json
 
 import scala.collection.mutable
@@ -24,6 +26,8 @@ class GremlinActor extends ActorPublisher[TextMessage] with ActorLogging {
 
   val requestQueue = mutable.Queue[Gremlin.Request]()
 
+  var inFlight = scala.collection.mutable.Set.empty[UUID]
+
   def receive = {
     case g:Gremlin.Request =>
       log.debug("[GremlinActor] Received Request ({}) from Subscriber", g)
@@ -37,17 +41,25 @@ class GremlinActor extends ActorPublisher[TextMessage] with ActorLogging {
       context.stop(self)
     case Request(cnt) =>
       sendReq()
+    case r:Response =>
+      //println(s"rem ${r.requestId}")
+      inFlight -= r.requestId
+    case GetInFlight =>
+      //println(inFlight.size)
+      context.sender() ! InFlight(inFlight.size)
     case _ =>
   }
 
   def sendReq() {
     while(isActive && totalDemand > 0 && !requestQueue.isEmpty) {
-      val json = TextMessage(Json.toJson(requestQueue.dequeue()).toString())
+      val r = requestQueue.dequeue()
+      inFlight += r.requestId
+      val json = TextMessage(Json.toJson(r).toString())
       onNext(json)
     }
   }
 
-  val requestStrategy = new MaxInFlightRequestStrategy(50) {
+  val requestStrategy = new MaxInFlightRequestStrategy(500) {
     override def inFlightInternally: Int = requestQueue.size
   }
 }

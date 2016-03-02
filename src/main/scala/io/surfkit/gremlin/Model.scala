@@ -59,5 +59,7 @@ object Gremlin {
   implicit val responseReads = Json.reads[Response]
 
   case object Cancel
+  case object GetInFlight
+  case class InFlight(num:Int)
 
 }
