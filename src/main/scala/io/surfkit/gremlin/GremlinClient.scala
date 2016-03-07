@@ -17,30 +17,7 @@ import scala.concurrent.duration.FiniteDuration
   * Created by coreyauger on 23/02/16.
   * http://doc.akka.io/docs/akka/snapshot/scala/http/client-side/websocket-support.html
   */
-object GremlinClient {
-
-  import scala.concurrent.Future
-
-  implicit val system = ActorSystem()
-  implicit val materializer = ActorMaterializer()
-
-  private var producerActor: Option[ActorRef] = None
-
-  val limiter = system.actorOf(LimiterActor.props(250))
-
-  private[this] def limitGlobal[T](limiter: ActorRef, maxAllowedWait: FiniteDuration): Flow[T, T, akka.NotUsed] = {
-    import akka.pattern.ask
-    import akka.util.Timeout
-    Flow[T].mapAsync(4)((element: T) => {
-      implicit val triggerTimeout = Timeout(maxAllowedWait)
-      val limiterTriggerFuture = limiter ? LimiterActor.WantToPass
-      limiterTriggerFuture.map((_) => element)
-    })
-  }
-
-  // Future[Done] is the materialized value of Sink.foreach,
-  // emitted when the stream completes
-
+object GremlinClient{
   def buildRequest(gremlin: String, bindings: Map[String,String] = Map.empty[String, String] ) = {
     Gremlin.Request(
       requestId = UUID.randomUUID,
@@ -53,45 +30,69 @@ object GremlinClient {
       )
     )
   }
+}
 
-  def connectFlow(flow:Source[TextMessage, Future[IOResult]], url:String = "ws://localhost:8182") = {
-    val webSocketFlow = Http().webSocketClientFlow(WebSocketRequest(url))
+class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250) {
+  import scala.concurrent.Future
+
+  implicit val system = ActorSystem()
+  implicit val materializer = ActorMaterializer()
+
+  private var producerActor: Option[ActorRef] = None
+
+  private val limiter = system.actorOf(LimiterActor.props(maxInFlight))
+
+  private def limitGlobal[T](limiter: ActorRef, maxAllowedWait: FiniteDuration): Flow[T, T, akka.NotUsed] = {
+    import akka.pattern.ask
+    import akka.util.Timeout
+    Flow[T].mapAsync(4)((element: T) => {
+      implicit val triggerTimeout = Timeout(maxAllowedWait)
+      val limiterTriggerFuture = limiter ? LimiterActor.WantToPass
+      limiterTriggerFuture.map((_) => element)
+    })
+  }
+
+  def connectFlow(flow:Source[Gremlin.Request, Future[IOResult]]) = {
+    val webSocketFlow = Http().webSocketClientFlow(WebSocketRequest(host))
 
     val incoming: Sink[Message, Future[Done]] =
       Sink.foreach[Message] {
         case message: TextMessage.Strict =>
           val res = Json.parse(message.text).as[Gremlin.Response]
-          //producerActor.map(_ ! res )
-          //println(res)
           limiter ! res
           print("#")
+        case x =>
+          println(s"[WARNING] Sink case for unknown type ${x}")
       }
 
     val (upgradeResponse, closed) =
       flow
+        .map{ r =>
+          limiter ! r
+          TextMessage(Json.toJson(r).toString())
+        }
       .via(limitGlobal[TextMessage](limiter, 10 minutes) )
       .viaMat(webSocketFlow)(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
       .toMat(incoming)(Keep.both) // also keep the Future[Done]
       .run()
 
     closed.foreach(_ => println("closed"))
-
   }
 
-  def connectActor(url:String = "ws://localhost:8182"):ActorRef = {
+  def connectActor:ActorRef = {
     val outgoing = Source.actorPublisher(GremlinActor.props)
 
     // flow to use (note: not re-usable!)
-    val webSocketFlow = Http().webSocketClientFlow(WebSocketRequest(url))
+    val webSocketFlow = Http().webSocketClientFlow(WebSocketRequest(host))
 
     val incoming: Sink[Message, Future[Done]] =
       Sink.foreach[Message] {
         case message: TextMessage.Strict =>
-          //println(json)
           val res = Json.parse(message.text).as[Gremlin.Response]
           producerActor.map(_ ! res )
-          //println(res)
           print(s".")
+        case x =>
+          println(s"[WARNING] Sink case for unknown type ${x}")
       }
 
     //http://doc.akka.io/docs/akka-stream-and-http-experimental/2.0.3/scala/stream-integrations.html
