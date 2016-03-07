@@ -32,7 +32,7 @@ object GremlinClient{
   }
 }
 
-class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250) {
+class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250, responder:Option[ActorRef] = None, onResponse:Option[Gremlin.Response => Unit] = None) {
   import scala.concurrent.Future
 
   implicit val system = ActorSystem()
@@ -52,15 +52,20 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250)
     })
   }
 
+  private def handleResponse(res: Gremlin.Response) = {
+    limiter ! res
+    responder.foreach(_ ! res)
+    onResponse.foreach(_(res))
+    print("#")
+  }
+
   def connectFlow(flow:Source[Gremlin.Request, Future[IOResult]]) = {
     val webSocketFlow = Http().webSocketClientFlow(WebSocketRequest(host))
 
     val incoming: Sink[Message, Future[Done]] =
       Sink.foreach[Message] {
         case message: TextMessage.Strict =>
-          val res = Json.parse(message.text).as[Gremlin.Response]
-          limiter ! res
-          print("#")
+          handleResponse(Json.parse(message.text).as[Gremlin.Response])
         case x =>
           println(s"[WARNING] Sink case for unknown type ${x}")
       }
@@ -88,9 +93,7 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250)
     val incoming: Sink[Message, Future[Done]] =
       Sink.foreach[Message] {
         case message: TextMessage.Strict =>
-          val res = Json.parse(message.text).as[Gremlin.Response]
-          producerActor.map(_ ! res )
-          print(s".")
+          handleResponse(Json.parse(message.text).as[Gremlin.Response])
         case x =>
           println(s"[WARNING] Sink case for unknown type ${x}")
       }
