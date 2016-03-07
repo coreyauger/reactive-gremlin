@@ -1,23 +1,20 @@
 package io.surfkit.gremlin
 
-import java.io.File
 import java.util.UUID
 
 import akka.Done
 import akka.actor.{ActorRef, ActorSystem}
-import akka.http.javadsl.model.StatusCodes
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws._
 import akka.stream.{IOResult, ActorMaterializer}
 import akka.stream.scaladsl._
-import akka.util.ByteString
 import play.api.libs.json.Json
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.FiniteDuration
 
 /**
-  * Created by suroot on 23/02/16.
+  * Created by coreyauger on 23/02/16.
   * http://doc.akka.io/docs/akka/snapshot/scala/http/client-side/websocket-support.html
   */
 object GremlinClient {
@@ -31,11 +28,10 @@ object GremlinClient {
 
   val limiter = system.actorOf(LimiterActor.props(250))
 
-  def limitGlobal[T](limiter: ActorRef, maxAllowedWait: FiniteDuration): Flow[T, T, akka.NotUsed] = {
+  private[this] def limitGlobal[T](limiter: ActorRef, maxAllowedWait: FiniteDuration): Flow[T, T, akka.NotUsed] = {
     import akka.pattern.ask
     import akka.util.Timeout
     Flow[T].mapAsync(4)((element: T) => {
-      //import system.dispatcher
       implicit val triggerTimeout = Timeout(maxAllowedWait)
       val limiterTriggerFuture = limiter ? LimiterActor.WantToPass
       limiterTriggerFuture.map((_) => element)
@@ -68,13 +64,11 @@ object GremlinClient {
           //producerActor.map(_ ! res )
           //println(res)
           limiter ! res
-         // println(s"out ${res.requestId}")
           print("#")
       }
 
     val (upgradeResponse, closed) =
       flow
-      //.transform(() => new BufferN[TextMessage](syncSet, 1000))
       .via(limitGlobal[TextMessage](limiter, 10 minutes) )
       .viaMat(webSocketFlow)(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
       .toMat(incoming)(Keep.both) // also keep the Future[Done]
