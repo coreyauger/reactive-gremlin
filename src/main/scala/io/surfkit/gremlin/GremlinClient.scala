@@ -56,7 +56,7 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
     limiter ! res
     responder.foreach(_ ! res)
     onResponse.foreach(_(res))
-    print("#")
+    //print("#")
   }
 
   def connectFlow(flow:Source[Gremlin.Request, Future[IOResult]]) = {
@@ -81,7 +81,7 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
       .toMat(incoming)(Keep.both) // also keep the Future[Done]
       .run()
 
-    closed.foreach(_ => println("closed"))
+    closed
   }
 
   def connectActor:ActorRef = {
