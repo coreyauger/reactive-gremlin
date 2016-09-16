@@ -66,6 +66,15 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
       Sink.foreach[Message] {
         case message: TextMessage.Strict =>
           handleResponse(Json.parse(message.text).as[Gremlin.Response])
+        case TextMessage.Streamed(stream) =>
+          stream
+            .limit(100)                   // Max frames we are willing to wait for
+            .completionTimeout(5 seconds) // Max time until last frame
+            .runFold("")(_ + _)           // Merges the frames
+            .flatMap{ msg =>
+              handleResponse(Json.parse(msg).as[Gremlin.Response])
+              Future.successful(msg)
+            }
         case x =>
           println(s"[WARNING] Sink case for unknown type ${x}")
       }

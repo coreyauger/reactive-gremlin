@@ -13,7 +13,7 @@ scalaVersion := "2.11.7"
 fork := true
 
 lazy val deps = {
-  val akkaV = "2.4.2"
+  val akkaV = "2.4.8"
   val akkaStreamV = "2.0.3"
   Seq(
     "com.typesafe.akka"       %% "akka-actor"                 % akkaV,
