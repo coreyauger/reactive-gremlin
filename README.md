@@ -15,7 +15,7 @@ Add the following dependency to your porject.
 
 `resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"`
 
-`"io.surfkit" %%% "reactive-gremlin" % "0.0.1",`
+`"io.surfkit" %% "reactive-gremlin" % "0.0.1"`
 
 
 ##Usage
