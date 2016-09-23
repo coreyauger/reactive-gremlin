@@ -104,7 +104,7 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
         case message: TextMessage.Strict =>
           handleResponse(Json.parse(message.text).as[Gremlin.Response])
         case x =>
-          println(s"[WARNING] Sink case for unknown type ${x}")
+          println(s"[WARNING] Sink case NON 'TextMessage.Strict' (${x})")
       }
 
     //http://doc.akka.io/docs/akka-stream-and-http-experimental/2.0.3/scala/stream-integrations.html
