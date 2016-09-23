@@ -10,6 +10,14 @@ reactive-gremlin is a `streaming` websocket client that connects to a gremlin se
 
 reactive-gremlin provides a way around this by implementing backpressure through a side channel.  This will slow down the fast consumer while the server is overloaded and speed it up when the server catches up.  It does this throw a user controlled parameter on the maximum `in-flight` calls allowed to any one server.  The stream monitors responses from the server and controlls backpressure on the stream accordingly.
 
+### Build.sbt
+Add the following dependency to your porject.
+
+`resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"`
+
+`"io.surfkit" %%% "reactive-gremlin" % "0.0.1",`
+
+
 ##Usage
 
 ### scripts
