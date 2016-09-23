@@ -24,7 +24,7 @@ Add the following dependency to your porject.
 I have provided a simple builder to convert you gremlin scripts into the required types for transport.  Here are some examples of encoding a few gremlin `groovy` scripts
 
 ```scala
-val simple = GremlinClient.buildRequest("g.V().has('email','donald@trumpdonald.org').valueMap();")
+val simple = GremlinClient.buildRequest("g.V().has('email','donald@trumpdonald.org').has('is_douchebag','true').valueMap();")
 val create = GremlinClient.buildRequest("graph.addVertex(label, 'entity','uri','https://en.wikipedia.org/wiki/Donald_Trump');")
 ```
 ### client
@@ -52,7 +52,7 @@ def response(res:Gremlin.Response):Unit = {
 val gclient = new GremlinClient(host="ws://localhost:8182",maxInFlight=100, onResponse = Some(response))
 val producer = gclient.connectActor
 
-val simple = GremlinClient.buildRequest("g.V().has('email','donald@trumpdonald.org').valueMap();")
+val simple = GremlinClient.buildRequest("g.V().has('email','donald@trumpdonald.org').has('is_douchebag','true').valueMap();")
 val create = GremlinClient.buildRequest("graph.addVertex(label, 'entity','uri','https://en.wikipedia.org/wiki/Donald_Trump');")
 
 producer ! simple
