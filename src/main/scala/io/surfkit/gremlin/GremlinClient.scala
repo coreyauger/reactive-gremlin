@@ -6,12 +6,13 @@ import akka.Done
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws._
-import akka.stream.{IOResult, ActorMaterializer}
+import akka.stream._
 import akka.stream.scaladsl._
 import play.api.libs.json.Json
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Promise
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 
 /**
   * Created by coreyauger on 23/02/16.
@@ -32,13 +33,18 @@ object GremlinClient{
   }
 }
 
-class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250, responder:Option[ActorRef] = None, onResponse:Option[Gremlin.Response => Unit] = None) {
+class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250, responder:Option[ActorRef] = None, onResponse:Option[Gremlin.Response => Unit] = None, implicit val system: ActorSystem = ActorSystem()) {
   import scala.concurrent.Future
+  import system.dispatcher
 
-  implicit val system = ActorSystem()
-  implicit val materializer = ActorMaterializer()
+  private[this] val decider: Supervision.Decider = {
+    case _ => Supervision.Resume  // Never give up !
+  }
 
+  implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
   private var producerActor: Option[ActorRef] = None
+  private val promiseMap = scala.collection.mutable.HashMap.empty[UUID, Promise[Gremlin.Result]]
+  private val partialContentMap = scala.collection.mutable.HashMap.empty[UUID, List[Gremlin.Result]]
 
   private val limiter = system.actorOf(LimiterActor.props(maxInFlight))
 
@@ -54,9 +60,28 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
 
   private def handleResponse(res: Gremlin.Response) = {
     limiter ! res
+    promiseMap.get(res.requestId).map{ p =>
+      res.status match{
+        case Gremlin.Status(_,200,_) =>
+          val result = partialContentMap.get(res.requestId).map{ xs =>
+            partialContentMap -= res.requestId
+            res.result.copy(data = res.result.data ::: xs.flatMap(_.data) )
+          }.getOrElse(res.result)
+          p.complete(Try(result))
+          promiseMap -= res.requestId
+        case Gremlin.Status(_,206,_) =>
+          partialContentMap.get(res.requestId) match{
+            case Some(xs) => partialContentMap += res.requestId -> (res.result :: xs)
+            case None => partialContentMap += res.requestId -> (res.result :: Nil)
+          }
+        case s =>
+          promiseMap -= res.requestId
+          println(s"[ERROR] - GremlinClient: ${s.code} ${s.message} ${s.attributes}")
+          p.failure(new RuntimeException(s.message))
+      }
+    }
     responder.foreach(_ ! res)
     onResponse.foreach(_(res))
-    //print("#")
   }
 
   def connectFlow(flow:Source[Gremlin.Request, Future[IOResult]]) = {
@@ -93,6 +118,16 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
     closed
   }
 
+  def query(gremlin: String):Future[Gremlin.Result] = query(GremlinClient.buildRequest(gremlin))
+
+  def query(req: Gremlin.Request):Future[Gremlin.Result] = {
+    val p = Promise[Gremlin.Result]
+    val actorRef = producerActor.getOrElse(connectActor)
+    promiseMap.put(req.requestId, p)
+    actorRef ! req
+    p.future
+  }
+
   def connectActor:ActorRef = {
     val outgoing = Source.actorPublisher(GremlinActor.props)
 
@@ -103,6 +138,15 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
       Sink.foreach[Message] {
         case message: TextMessage.Strict =>
           handleResponse(Json.parse(message.text).as[Gremlin.Response])
+        case TextMessage.Streamed(stream) =>
+          stream
+            .limit(100)                   // Max frames we are willing to wait for
+            .completionTimeout(5 seconds) // Max time until last frame
+            .runFold("")(_ + _)           // Merges the frames
+            .flatMap{msg =>
+              handleResponse(Json.parse(msg).as[Gremlin.Response])
+              Future.successful(msg)
+            }
         case x =>
           println(s"[WARNING] Sink case NON 'TextMessage.Strict' (${x})")
       }

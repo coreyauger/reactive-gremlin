@@ -2,12 +2,7 @@ package io.surfkit.gremlin
 
 import java.util.UUID
 
-import akka.Done
-import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws._
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl._
+import scala.concurrent.ExecutionContext.Implicits.global
 import play.api.libs.json.Json
 
 /**
@@ -18,10 +13,15 @@ object Main extends App{
 
   override def main(args: Array[String]) {
 
-    /*val client = GremlinClient.connect()
+    val client = new GremlinClient()
 
-    client ! GremlinClient.buildRequest("g.V(323600).both().valueMap()")
-    client ! GremlinClient.buildRequest("g.V(323600).valueMap()")*/
+    val q = GremlinClient.buildRequest(s"""
+      |g.V().has('uid','31a08059-44ef-45d8-b264-843dd4af51ed').out('has_provider').out('member_of').has(label,'collaboration').valueMap('collaborationId');
+      """.stripMargin)
+    println(s"running query: ${q}")
+    client.query(q).foreach{ res =>
+      println(s"xx: ${res}")
+    }
   }
 
 }

@@ -6,13 +6,15 @@ sonatypeSettings
 
 name := "reactive-gremlin"
 
-version := "0.0.1"
+version := "0.0.2-SNAPSHOT"
+
+organization := "io.surfkit"
 
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 
 libraryDependencies ++= deps
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 
 fork := true
 
