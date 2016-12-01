@@ -1,8 +1,4 @@
-import SonatypeKeys._
-
 import sbt.Keys._
-
-sonatypeSettings
 
 name := "reactive-gremlin"
 
@@ -17,7 +13,6 @@ lazy val root = project.in(file(".")).settings(
   resolvers += "NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/",
   publishTo := Some("NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/")
 )
-
 
 libraryDependencies ++= deps
 
