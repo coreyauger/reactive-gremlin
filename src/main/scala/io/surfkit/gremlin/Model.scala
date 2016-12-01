@@ -47,8 +47,10 @@ object Gremlin {
   implicit val statusWrites = Json.writes[Status]
   implicit val statusReads = Json.reads[Status]
 
-  case class Result(data:List[JsValue],
-                    meta:Map[String, String])
+  case class Result(data:Option[List[JsValue]],
+                    meta:Map[String, String]){
+    def dataList = data.getOrElse(Nil)
+  }
   implicit val resultWrites = Json.writes[Result]
   implicit val resultReads = Json.reads[Result]
 

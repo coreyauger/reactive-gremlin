@@ -15,12 +15,17 @@ object Main extends App{
 
     val client = new GremlinClient()
 
-    val q = GremlinClient.buildRequest(s"""
+    val q =s"""
       |g.V().has('uid','31a08059-44ef-45d8-b264-843dd4af51ed').out('has_provider').out('member_of').has(label,'collaboration').valueMap('collaborationId');
-      """.stripMargin)
+      """.stripMargin
     println(s"running query: ${q}")
     client.query(q).foreach{ res =>
       println(s"xx: ${res}")
+    }
+
+    val q2 = "g.V().has('uid','049d8ab8-6541-4cc7-9b49-9662cfca8bdc').out('has_provider').out('member_of').has(label,'role').out('member_of').has(label,'collaboration').valueMap('collaborationId');"
+    client.query(q2).foreach{ res =>
+      println(s"yy: ${res}")
     }
   }
 

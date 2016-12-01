@@ -8,6 +8,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws._
 import akka.stream._
 import akka.stream.scaladsl._
+import akka.pattern.after
 import play.api.libs.json.Json
 import scala.concurrent.duration._
 import scala.concurrent.Promise
@@ -43,7 +44,7 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
 
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
   private var producerActor: Option[ActorRef] = None
-  private val promiseMap = scala.collection.mutable.HashMap.empty[UUID, Promise[Gremlin.Result]]
+  private val promiseMap = scala.collection.mutable.HashMap.empty[UUID, Promise[Gremlin.Response]]
   private val partialContentMap = scala.collection.mutable.HashMap.empty[UUID, List[Gremlin.Result]]
 
   private val limiter = system.actorOf(LimiterActor.props(maxInFlight))
@@ -60,15 +61,19 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
 
   private def handleResponse(res: Gremlin.Response) = {
     limiter ! res
+
     promiseMap.get(res.requestId).map{ p =>
+      def validResult = {
+        val result = partialContentMap.get(res.requestId).map{ xs =>
+          partialContentMap -= res.requestId
+          res.copy(result=res.result.copy(data = Some(res.result.data.get ::: xs.flatMap(_.data.get)) ))
+        }.getOrElse(res)
+        p.complete(Try(result))
+        promiseMap -= res.requestId
+      }
       res.status match{
-        case Gremlin.Status(_,200,_) =>
-          val result = partialContentMap.get(res.requestId).map{ xs =>
-            partialContentMap -= res.requestId
-            res.result.copy(data = res.result.data ::: xs.flatMap(_.data) )
-          }.getOrElse(res.result)
-          p.complete(Try(result))
-          promiseMap -= res.requestId
+        case Gremlin.Status(_,200,_) => validResult
+        case Gremlin.Status(_,204,_) => validResult
         case Gremlin.Status(_,206,_) =>
           partialContentMap.get(res.requestId) match{
             case Some(xs) => partialContentMap += res.requestId -> (res.result :: xs)
@@ -110,7 +115,7 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
           limiter ! r
           TextMessage(Json.toJson(r).toString())
         }
-      .via(limitGlobal[TextMessage](limiter, 10 minutes) )
+      .via(limitGlobal[TextMessage](limiter, 1 minutes) )
       .viaMat(webSocketFlow)(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
       .toMat(incoming)(Keep.both) // also keep the Future[Done]
       .run()
@@ -118,18 +123,23 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
     closed
   }
 
-  def query(gremlin: String):Future[Gremlin.Result] = query(GremlinClient.buildRequest(gremlin))
+  def query(gremlin: String)(implicit timeout: FiniteDuration = 3 seconds):Future[Gremlin.Response] = query(GremlinClient.buildRequest(gremlin))
 
-  def query(req: Gremlin.Request):Future[Gremlin.Result] = {
-    val p = Promise[Gremlin.Result]
+  def query(req: Gremlin.Request)(implicit timeout: FiniteDuration):Future[Gremlin.Response] = {
+    val p = Promise[Gremlin.Response]
     val actorRef = producerActor.getOrElse(connectActor)
     promiseMap.put(req.requestId, p)
+    lazy val t = after(duration = timeout, using = system.scheduler){
+      promiseMap -= req.requestId
+      Future.failed(new  scala.concurrent.TimeoutException("Future timed out!"))
+    }
+    val fWithTimeout = Future.firstCompletedOf(Seq(p.future, t) )
     actorRef ! req
-    p.future
+    fWithTimeout
   }
 
   def connectActor:ActorRef = {
-    val outgoing = Source.actorPublisher(GremlinActor.props)
+    val outgoing = Source.actorPublisher(GremlinActor.props(limiter))
 
     // flow to use (note: not re-usable!)
     val webSocketFlow = Http().webSocketClientFlow(WebSocketRequest(host))
@@ -137,6 +147,7 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
     val incoming: Sink[Message, Future[Done]] =
       Sink.foreach[Message] {
         case message: TextMessage.Strict =>
+          //println(s"&&&&&: ${Json.parse(message.text).as[Gremlin.Response]}")
           handleResponse(Json.parse(message.text).as[Gremlin.Response])
         case TextMessage.Streamed(stream) =>
           stream
@@ -153,6 +164,8 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
 
     //http://doc.akka.io/docs/akka-stream-and-http-experimental/2.0.3/scala/stream-integrations.html
     val ref = Flow[TextMessage]
+      .keepAlive(45.seconds, () => TextMessage(""))
+      .via(limitGlobal[TextMessage](limiter, 1 minutes) )
       .viaMat(webSocketFlow)(Keep.right) // keep the materialized Future[WebSocketUpgradeResponse]
       .toMat(incoming)(Keep.both) // also keep the Future[Done]
       .runWith(outgoing)
