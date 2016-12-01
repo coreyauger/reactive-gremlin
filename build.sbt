@@ -6,15 +6,22 @@ sonatypeSettings
 
 name := "reactive-gremlin"
 
-version := "0.0.2-SNAPSHOT"
+version := "0.0.2"
 
 organization := "io.surfkit"
 
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 
+lazy val root = project.in(file(".")).settings(
+  credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
+  resolvers += "NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/",
+  publishTo := Some("NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/")
+)
+
+
 libraryDependencies ++= deps
 
-scalaVersion := "2.11.8"
+scalaVersion := "2.11.7"
 
 fork := true
 
@@ -31,34 +38,3 @@ dependencyOverrides ++= Set(
   "com.fasterxml.jackson.core" % "jackson-databind" % "2.4.4"
 )
 
-homepage := Some(url("http://www.surfkit.io/"))
-
-licenses += ("MIT License", url("http://www.opensource.org/licenses/mit-license.php"))
-
-scmInfo := Some(ScmInfo(
-  url("https://github.com/coreyauger/reactive-gremlin"),
-  "scm:git:git@github.com/coreyauger/reactive-gremlin.git",
-  Some("scm:git:git@github.com:coreyauger/reactive-gremlin.git")))
-
-
-publishMavenStyle := true
-
-publishTo := {
-  val nexus = "https://oss.sonatype.org/"
-  if (isSnapshot.value)
-    Some("snapshots" at nexus + "content/repositories/snapshots")
-  else
-    Some("releases" at nexus + "service/local/staging/deploy/maven2")
-}
-
-pomExtra := (
-  <developers>
-    <developer>
-      <id>coreyauger</id>
-      <name>Corey Auger</name>
-      <url>https://github.com/coreyauger/</url>
-    </developer>
-  </developers>
-  )
-
-pomIncludeRepository := { _ => false }
