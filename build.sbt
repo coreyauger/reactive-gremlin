@@ -6,7 +6,7 @@ sonatypeSettings
 
 name := "reactive-gremlin"
 
-version := "0.0.2-SNAPSHOT"
+version := "0.0.3-SNAPSHOT"
 
 organization := "io.surfkit"
 
