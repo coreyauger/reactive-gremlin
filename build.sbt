@@ -2,7 +2,7 @@ import sbt.Keys._
 
 name := "reactive-gremlin"
 
-version := "0.0.2"
+version := "0.0.3"
 
 organization := "io.surfkit"
 
