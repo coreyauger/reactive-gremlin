@@ -77,10 +77,10 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
         case Gremlin.Status(_,200,_) => validResult
         case Gremlin.Status(_,204,_) => validResult
         case Gremlin.Status(_,206,_) =>
-          partialContentMap.get(res.requestId) match{
-            case Some(xs) => partialContentMap += res.requestId -> (res.result :: xs)
-            case None => partialContentMap += res.requestId -> (res.result :: Nil)
-          }
+          partialContentMap.put(res.requestId, partialContentMap.get(res.requestId) match{
+            case Some(xs) => (res.result :: xs)
+            case None => (res.result :: Nil)
+          })
         case s =>
           promiseMap -= res.requestId
           println(s"[ERROR] - GremlinClient: ${s.code} ${s.message} ${s.attributes}")
