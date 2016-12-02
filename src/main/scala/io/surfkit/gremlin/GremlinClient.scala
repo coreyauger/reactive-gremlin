@@ -10,6 +10,8 @@ import akka.stream._
 import akka.stream.scaladsl._
 import akka.pattern.after
 import play.api.libs.json.Json
+
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.Promise
 import scala.concurrent.duration.FiniteDuration
@@ -44,8 +46,8 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
 
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
   private var producerActor: Option[ActorRef] = None
-  private val promiseMap = scala.collection.mutable.HashMap.empty[UUID, Promise[Gremlin.Response]]
-  private val partialContentMap = scala.collection.mutable.HashMap.empty[UUID, List[Gremlin.Result]]
+  private val promiseMap = mutable.HashMap.empty[UUID, Promise[Gremlin.Response]]
+  private val partialContentMap = scala.collection.concurrent.TrieMap.empty[UUID, List[Gremlin.Result]]
 
   private val limiter = system.actorOf(LimiterActor.props(maxInFlight))
 
@@ -61,13 +63,12 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
 
   private def handleResponse(res: Gremlin.Response) = {
     limiter ! res
-
     promiseMap.get(res.requestId).map{ p =>
       def validResult = {
         val result = partialContentMap.get(res.requestId).map{ xs =>
-          partialContentMap -= res.requestId
           res.copy(result=res.result.copy(data = Some(res.result.data.get ::: xs.flatMap(_.data.get)) ))
         }.getOrElse(res)
+        partialContentMap -= res.requestId
         p.complete(Try(result))
         promiseMap -= res.requestId
       }
