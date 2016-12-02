@@ -71,6 +71,7 @@ class GremlinClient(host:String = "ws://localhost:8182", maxInFlight: Int = 250,
         p.complete(Try(result))
         promiseMap -= res.requestId
       }
+      println(s"titan response(${res.status.code}) for request: ${res.requestId}")
       res.status match{
         case Gremlin.Status(_,200,_) => validResult
         case Gremlin.Status(_,204,_) => validResult
