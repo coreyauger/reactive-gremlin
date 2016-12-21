@@ -38,9 +38,20 @@ val gclient = new GremlinClient(host="ws://localhost:8182",maxInFlight=100)
 ```
 
 ### pushing data
-There are 2 ways to push your request data into the flow:
+There are 3 ways to push your request data into the flow:
+* as a driver that will return a `Future`
 * via `ActorRef` publisher (usefull for standard interaction with your gremlin server)
 * via `Flow[GremlinRequest, _]` flow that you create from another `Source`.  This is extreamly usfull when bulk loading data from a file or other source.  More on this below.
+
+### drive returning a future example
+```scala
+val gclient = new GremlinClient(host="ws://localhost:8182",maxInFlight=100)
+gclient.query("g.V().has('email','donald@trumpdonald.org').has('is_douchebag','true').valueMap();")
+       .map{ x: Gremlin.Response =>
+          val json: Option[List[JsValue]] = x.result.data
+          ...
+       }
+```
 
 ### actor push example
 Here is a simple but full example of how to use the client
