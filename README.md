@@ -18,7 +18,7 @@ Add the following dependency to your porject.
 `"io.surfkit" %% "reactive-gremlin" % "0.0.1"`
 
 
-##Usage
+## Usage
 
 ### scripts
 I have provided a simple builder to convert you gremlin scripts into the required types for transport.  Here are some examples of encoding a few gremlin `groovy` scripts
