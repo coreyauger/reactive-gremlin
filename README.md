@@ -3,7 +3,7 @@ High throughput akka http gremlin 3 websocket connector with backpressure.
 
 High Flow Gremlin ....  Blows your hair back !
 
-![gremlin](http://www.coreyauger.com/images/gremlin.png "Blow your hair back!")
+![gremlin](https://cdn.obsev.com/wp-content/uploads/2018/04/Gremlins-Gizmo-1024x688.jpg.webp "Blow your hair back!")
 
 ### What is reactive-gremlin
 reactive-gremlin is a `streaming` websocket client that connects to a gremlin server to execute gremlin scripts.  Current client including the Java client provided by datastax have the capability to crash your gremlin server by overflowing the server with asyn requests.  Your gremlin server will buffer incoming requests and service them when it has finished the ones in the queue.  For fast consumers (bulk loaders) it is possible to cause Out of memory Exceptions and crash the server.   
